@@ -3,22 +3,30 @@ import requests
 from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
-import openpyxl
-from openpyxl.utils import get_column_letter
 
 
+"""
+A class that generates an excel full of scraped data
+"""
 class Web_COT_Data_Scrape():
 
-    excel_file_name = "COT_REPORT"
-    first_scrape = True
 
+    """
+    The initiator function
+    ticket: 6 digit String that resembles the specific data
+    year: the year we want to scrape the data from
+    """
     def __init__(self, ticket, year):
         self.ticket = ticket
         self.year = year
 
-        self.get_all_data()
+        data = self.get_all_data()
+        self.write_excel(data)
 
 
+    """
+    A function that scrapes data from a site by date
+    """
     def web_scrape(self, date):
 
         url_legacy_futures = "https://www.tradingster.com/cot/legacy-futures/"+str(self.ticket)+"/"+str(date)
@@ -26,6 +34,7 @@ class Web_COT_Data_Scrape():
         content_legacy_futures = response_legacy_futures.content
         parsed_content_legacy_futures = html.fromstring(content_legacy_futures)
 
+        #There are cases when there is no Tuesday so I go to a Monday, thats the only second option
         if(parsed_content_legacy_futures.xpath('/ html / head / title/text()')[0] == '500 Internal Server Error'):
             date = datetime.strptime(date, '%Y-%m-%d') + timedelta(days=-1)
             date = date.strftime("%Y-%m-%d")
@@ -33,6 +42,7 @@ class Web_COT_Data_Scrape():
             response_legacy_futures = requests.get(url_legacy_futures)
             content_legacy_futures = response_legacy_futures.content
             parsed_content_legacy_futures = html.fromstring(content_legacy_futures)
+            #If there is no Monday too to scrape, the year still hasn't ended.
             if (parsed_content_legacy_futures.xpath('/ html / head / title/text()')[0] == '500 Internal Server Error'):
                 return None
 
@@ -92,24 +102,31 @@ class Web_COT_Data_Scrape():
         return data
 
 
+    """
+    A functions that return a DataFrame of all the data we scraped and manipulated
+    """
     def get_all_data(self):
+        #List of all Tuesday's in a year
         list_of_dates = self.alltuesdays(self.year)
 
-        #generate first row in excel
+        #generate the Dataframe 0 rows, 36 columns
         df = pd.DataFrame(columns=np.arange(36))
 
+        #A loop that goes through all dates and scrapes the data of the same date
         for date in list_of_dates:
             data = self.web_scrape(date)
+            #If the data is None, doesn't exist, It means the year hasn't ended yet and we no longer need to scrape
             if(data == None):
                 print("end data")
                 break
 
+            #Manipulating the data with the week before(2 weeks sum), the first row cant be manipulated,
+            #there is no row before.
             if(len(df) > 0):
-                #
+
                 last_data = df.loc[len(df) - 1]
-                #
+
                 data[3] = int(data[2]) - int(last_data[2])
-                #
                 data[7] = int(data[5]) + int(last_data[5])
                 data[11] = int(data[9]) + int(last_data[9])
 
@@ -121,48 +138,31 @@ class Web_COT_Data_Scrape():
                 data[31] = int(data[29]) + int(last_data[29])
                 data[35] = int(data[33]) + int(last_data[33])
 
-                print(data)
-
+            #putting the data in the right row
             df.loc[len(df)] = data
 
+        #reverse the dataframe
         df = df.loc[::-1]
-        print(df)
 
-        excel_file = openpyxl.Workbook()
-        sheet = excel_file.active
+        return df
+
+
+    """
+    A function that generates an excel file with all the data that we scraped
+    dataFrame: A Data Frame object of data
+    """
+    def write_excel(self, dataFrame):
 
         writer = pd.ExcelWriter('COT_REPORT.xlsx', engine='openpyxl')
-        df.to_excel(writer, sheet_name='COT_REPORT', index=False, startrow=6, header=False)
+        dataFrame.to_excel(writer, sheet_name='COT_REPORT', index=False, startrow=6, header=False)
         writer.close()
 
 
-    def fill_excel(self):
-        pass
 
-    def load_excel(self):
-
-        #Excel load
-        excel_file = openpyxl.Workbook()
-        sheet = excel_file.active
-        excel_file['Sheet'].title = 'US30'
-
-        sheet['A1'] = ""
-        sheet['A2'] = ""
-        sheet.freeze_panes = 'B1'
-
-        # Start changing width from column C onwards
-        column = 1
-        while column < 26:
-            i = get_column_letter(column)
-            sheet.column_dimensions[i].width = 12
-            column += 1
-
-        #sheet.move_range("A7:Z7", rows=1, cols=0, translate=True)
-
-        excel_file.save('COT_REPORT.xlsx')
-
-
-    # DONT FORGET TO ADD IF THE SITE DIDNT FIND VALUES, TAKE A DAY BACK TO CHECK
+    """
+    A function that returns a list of all the dates of tuesday in the same year. Example, 2022-21-12
+    year: A parameter for a year. Example, 2023
+    """
     def alltuesdays(self, year):
         return pd.date_range(start=str(year), end=str(year + 1),
                 freq='W-TUE').strftime('%Y-%m-%d').tolist()
