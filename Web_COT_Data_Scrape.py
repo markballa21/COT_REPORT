@@ -11,14 +11,75 @@ A class that generates an excel full of scraped data
 class Web_COT_Data_Scrape():
 
 
+    #fin in the link
+    dict_data1 = {
+        #Currencies
+        'AUSTRALIAN DOLLAR': '232741', 'BRITISH POUND STERLING': '096742', 'CANADIAN DOLLAR': '090741',
+        'EURO FX': '099741', 'JAPANESE YEN': '097741', 'SWISS FRANC': '092741', 'U.S. DOLLAR INDEX': '098662',
+        'MEXICAN PESO': '095741', 'NEW ZEALAND DOLLAR': '112741', 'BITCOIN': '133741',
+
+        #Stock Indexes
+        'S&P 500 STOCK INDEX': '13874%2B', 'NASDAQ-100 STOCK INDEX (MINI)': '209742', 'DOW JONES INDUSTRIAL AVG- x $5': '124603',
+        'RUSSELL 2000 MINI INDEX FUTURE': '239742', 'E-MINI S&P 400 STOCK INDEX': '33874A', 'E-MINI S&P 500 STOCK INDEX': '13874A',
+
+        #Treasuries and Rates
+        '30-DAY FEDERAL FUNDS': '045601', '3-MONTH EURODOLLARS': '132741', '2-YEAR U.S. TREASURY NOTES': '042601',
+        '5-YEAR U.S. TREASURY NOTES': '044601', '10-YEAR U.S. TREASURY NOTES': '043602',
+    }
+
+    #disagg in the link
+    dict_data2 = {
+        #Energies
+        'CRUDE OIL, LIGHT SWEET':'067651', 'GASOLINE BLENDSTOCK (RBOB)': '111659',
+        '#2 HEATING OIL, NY HARBOR-ULSD': '022651', 'NATURAL GAS': '023651',
+
+        #Grains
+        'Corn': '002602', 'SOYBEANS': '005602', 'SOYBEAN OIL': '007601', 'SOYBEAN MEAL': '026603', 'WHEAT-SRW': '001602',
+        'WHEAT-HRW': '001612', 'WHEAT-HRSpring': '001626', 'OATS': '004603', 'ROUGH RICE': '039601',
+
+        #Livestock
+        'LIVE CATTLE': '057642', 'FEEDER CATTLE': '061641', 'LEAN HOGS': '054642',
+
+        #Metals
+        'GOLD': '088691', 'SILVER': '084691', 'COPPER-GRADE #1': '085692', 'PALLADIUM': '075651', 'PLATINUM': '076651',
+
+        #Softs
+        'COCOA': '073732', 'COTTON NO. 2': '033661', 'COFFEE C': '083731', 'SUGAR NO. 11': '080732',
+        'FRZN CONCENTRATED ORANGE JUICE': '040701', 'RANDOM LENGTH LUMBER': '058643'
+                       }
+
+
     """
     The initiator function
-    ticket: 6 digit String that resembles the specific data
+    name: name of the data we want to scrape
     year: the year we want to scrape the data from
     """
-    def __init__(self, ticket, year):
-        self.ticket = ticket
+    def __init__(self, name,year):
         self.year = year
+        self.name = name
+
+        #the ticket of a name
+        self.ticket = ""
+        #the option is either "fin" or "disagg" in the links
+        self.link_key = ""
+
+        #get the ticket by the name we got from the user
+        data1 = self.dict_data1.keys()
+        data2 = self.dict_data2.keys()
+        for i in data1:
+            if(self.name == i):
+                self.ticket = self.dict_data1.get(i)
+                self.link_key = "fin"
+                break
+        if(self.ticket == ""):
+            for i in data2:
+                if (self.name == i):
+                    self.ticket = self.dict_data2.get(i)
+                    self.link_key = "disagg"
+                    break
+
+        if (self.ticket == ""):
+            print("Wrong name")
 
         data = self.get_all_data()
         self.write_excel(data)
@@ -36,6 +97,7 @@ class Web_COT_Data_Scrape():
 
         #There are cases when there is no Tuesday so I go to a Monday, thats the only second option
         if(parsed_content_legacy_futures.xpath('/ html / head / title/text()')[0] == '500 Internal Server Error'):
+            #we change the date so we dont need to check the 2nd time in the futures
             date = datetime.strptime(date, '%Y-%m-%d') + timedelta(days=-1)
             date = date.strftime("%Y-%m-%d")
             url_legacy_futures = "https://www.tradingster.com/cot/legacy-futures/" + str(self.ticket) + "/" + str(date)
@@ -66,11 +128,12 @@ class Web_COT_Data_Scrape():
         Short_Commercial_Percent = parsed_content_legacy_futures.xpath('/html/body/div[1]/div/div/div[3]/div[2]/table/tbody/tr[6]/td[5]/text()')[0]
 
 
-
-        url_futures = "https://www.tradingster.com/cot/futures/fin/"+str(self.ticket)+"/"+str(date)
+        #again we use the link_key because we have 2 types of links
+        url_futures = "https://www.tradingster.com/cot/futures/"+self.link_key+"/"+str(self.ticket)+"/"+str(date)
         response_futures = requests.get(url_futures)
         content_futures = response_futures.content
         parsed_content_futures = html.fromstring(content_futures)
+
 
         Long_Leveraged_Funds = parsed_content_futures.xpath('/html/body/div[1]/div/div/div[3]/div[2]/table/tbody/tr[3]/td[2]/text()')[0].replace(',', '')
         Long_Leveraged_Funds_Change = \
@@ -138,6 +201,7 @@ class Web_COT_Data_Scrape():
                 data[31] = int(data[29]) + int(last_data[29])
                 data[35] = int(data[33]) + int(last_data[33])
 
+            print(data)
             #putting the data in the right row
             df.loc[len(df)] = data
 
